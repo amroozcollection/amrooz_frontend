@@ -11,6 +11,7 @@ const COLUMNS = [
       { label: "Men's", href: '/products?category=men' },
       { label: 'Accessories', href: '/products?category=accessories' },
       { label: 'Sale', href: '/products?sale=true' },
+      { label: 'Pricing', href: '/pricing' },
     ],
   },
   {

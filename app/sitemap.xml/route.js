@@ -5,6 +5,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'https://api.amroozcollection.com
 const STATIC_PAGES = [
   { path: '/', priority: '1.0', changefreq: 'daily' },
   { path: '/products', priority: '0.9', changefreq: 'daily' },
+  { path: '/pricing', priority: '0.8', changefreq: 'daily' },
   { path: '/about', priority: '0.5', changefreq: 'monthly' },
   { path: '/contact', priority: '0.6', changefreq: 'monthly' },
   { path: '/faq', priority: '0.5', changefreq: 'monthly' },
@@ -32,7 +33,7 @@ async function loadProducts() {
   }
 }
 
-export const revalidate = 3600;
+export const dynamic = 'force-dynamic'; // product list is cached for an hour via fetch revalidate
 
 export async function GET() {
   const products = await loadProducts();

@@ -1,6 +1,6 @@
 import { getCatalog, formatRs, SITE_URL } from '@/lib/catalog';
 
-export const revalidate = 3600;
+export const dynamic = 'force-dynamic'; // product list is cached 5 min inside getCatalog()
 
 // Served at /llms.txt — a short, Markdown summary of the site for AI agents.
 export async function GET() {
@@ -13,7 +13,8 @@ export async function GET() {
     '',
     '## Shop',
     '',
-    `- [All products](${SITE_URL}/products): the full catalogue with prices`,
+    `- [Pricing](${SITE_URL}/pricing): every product with its current price in PKR`,
+    `- [All products](${SITE_URL}/products): the full catalogue`,
     ...products
       .slice(0, 20)
       .map((p) => `- [${p.name}](${SITE_URL}/products/${p.id}): ${formatRs(p.price)}`),
