@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import StatCard from '@/components/admin/StatCard';
 import { apiFetch } from '@/lib/admin/api';
+import { fetchAdminOrders } from '@/lib/admin/orders';
 import { formatPrice } from '@/utils/format';
 import { AlertIcon, BoxIcon, CashIcon, ReceiptIcon, TagIcon, TrendingUpIcon, TrendingDownIcon } from '@/components/ui/Icons';
 
@@ -22,10 +23,12 @@ export default function DashboardPage() {
         if (active) {
           setStats(data);
           // Fetch recent orders
-          const ordersRes = await apiFetch('/admin/orders?limit=5&sort=createdAt&order=desc');
-          if (ordersRes.ok) {
-            const ordersData = await ordersRes.json();
-            setRecentOrders(ordersData);
+          try {
+            const ordersData = await fetchAdminOrders({ page: 1, limit: 5 });
+            const list = Array.isArray(ordersData) ? ordersData : ordersData?.data ?? [];
+            if (active) setRecentOrders(list.slice(0, 5));
+          } catch {
+            // Recent orders are optional — the stat cards still render without them.
           }
         }
       } catch (err) {
