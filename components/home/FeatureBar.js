@@ -2,7 +2,7 @@ import { TruckIcon, RefreshIcon, ShieldIcon, HeadsetIcon } from '@/components/ui
 
 const FEATURES = [
   { Icon: TruckIcon, title: 'Fast Delivery', text: 'Delivery charges Rs 250' },
-  { Icon: RefreshIcon, title: '30-Day Returns', text: 'Easy, no-fuss exchanges' },
+  { Icon: RefreshIcon, title: '07 Days Returns', text: 'Easy, no-fuss exchanges' },
   { Icon: ShieldIcon, title: 'Secure Checkout', text: 'Encrypted & protected' },
   { Icon: HeadsetIcon, title: 'Dedicated Support', text: 'Here for you, always' },
 ];
