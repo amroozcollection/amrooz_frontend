@@ -47,6 +47,9 @@ const structuredData = [
     email: 'support@amroozcollection.com',
     telephone: '+92-315-4047963',
     areaServed: 'PK',
+    // Online-only store. Add streetAddress / addressLocality once a real
+    // business address is confirmed — never guessed.
+    address: { '@type': 'PostalAddress', addressCountry: 'PK' },
     contactPoint: [
       {
         '@type': 'ContactPoint',
