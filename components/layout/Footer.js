@@ -1,11 +1,6 @@
 import Link from 'next/link';
 import NewsletterForm from '@/components/layout/NewsletterForm';
-import {
-  InstagramIcon,
-  FacebookIcon,
-  TwitterIcon,
-  PinterestIcon,
-} from '@/components/ui/Icons';
+import { InstagramIcon, FacebookIcon } from '@/components/ui/Icons';
 
 const COLUMNS = [
   {
@@ -41,10 +36,8 @@ const COLUMNS = [
 ];
 
 const SOCIALS = [
-  { label: 'Instagram', href: 'https://instagram.com', Icon: InstagramIcon },
-  { label: 'Facebook', href: 'https://facebook.com', Icon: FacebookIcon },
-  { label: 'Twitter', href: 'https://twitter.com', Icon: TwitterIcon },
-  { label: 'Pinterest', href: 'https://pinterest.com', Icon: PinterestIcon },
+  { label: 'Instagram', href: 'https://www.instagram.com/amroozcollection/', Icon: InstagramIcon },
+  { label: 'Facebook', href: 'https://www.facebook.com/profile.php?id=61593557921142', Icon: FacebookIcon },
 ];
 
 export default function Footer() {
