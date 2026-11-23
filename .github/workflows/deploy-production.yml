@@ -2,135 +2,143 @@ name: Deploy Frontend to Production
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch: # Allows manual trigger from GitHub
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two deployments at the same time.
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: production
     env:
-      DEPLOY_SSH_HOST: ${{ secrets.SSH_HOST || vars.SSH_HOST }}
-      DEPLOY_SSH_USERNAME: ${{ secrets.SSH_USERNAME || vars.SSH_USERNAME }}
-      DEPLOY_SSH_PASSWORD: ${{ secrets.SSH_PASSWORD || vars.SSH_PASSWORD }}
-      DEPLOY_SSH_PORT: ${{ secrets.SSH_PORT || vars.SSH_PORT }}
-    
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      APP_DIR: /home/u278943707/domains/amroozcollection.com/hbuilds/current/nodejs
+
     steps:
+      - name: Check deployment secrets
+        run: |
+          missing=""
+          for v in SSH_HOST SSH_PORT SSH_USERNAME; do
+            [ -z "${!v}" ] && missing="$missing $v"
+          done
+          if [ -z "$SSH_PRIVATE_KEY" ] && [ -z "$SSH_PASSWORD" ]; then
+            missing="$missing SSH_PRIVATE_KEY(or SSH_PASSWORD)"
+          fi
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets in Settings > Environments > production:$missing"
+            exit 1
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'npm'
+          node-version: '22'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Next.js application
+      - name: Build Next.js (standalone)
         env:
-          NEXT_PUBLIC_API_URL: https://api.amroozcollection.com
+          NEXT_PUBLIC_API_URL: https://api.amroozcollection.com/api
         run: npm run build
 
-      - name: Create deployment package
+      - name: Package release
         run: |
-          echo "📦 Creating deployment package..."
-          # Create a tarball with built files and necessary runtime files
-          tar -czf deployment.tar.gz \
-            .next \
-            public \
-            package.json \
-            package-lock.json \
-            next.config.js \
-            node_modules
+          set -e
+          test -f .next/standalone/server.js
+          rm -rf release && mkdir -p release/.next
+          cp -r .next/standalone/. release/
+          mkdir -p release/.next/static
+          cp -r .next/static/. release/.next/static/
+          cp -r public release/public
+          tar -czf release.tar.gz -C release .
+          ls -lh release.tar.gz
 
-      - name: Validate deployment credentials
+      - name: Configure SSH
         run: |
-          missing=()
-          [ -z "$DEPLOY_SSH_HOST" ] && missing+=("SSH_HOST/secrets or vars")
-          [ -z "$DEPLOY_SSH_USERNAME" ] && missing+=("SSH_USERNAME/secrets or vars")
-          [ -z "$DEPLOY_SSH_PASSWORD" ] && missing+=("SSH_PASSWORD/secrets or vars")
-          [ -z "$DEPLOY_SSH_PORT" ] && missing+=("SSH_PORT/secrets or vars")
-
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "❌ Missing deployment credentials: ${missing[*]}"
-            exit 1
-          fi
-
-      - name: Deploy to Hostinger via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ env.DEPLOY_SSH_HOST }}
-          username: ${{ env.DEPLOY_SSH_USERNAME }}
-          password: ${{ env.DEPLOY_SSH_PASSWORD }}
-          port: ${{ env.DEPLOY_SSH_PORT }}
-          script: |
-            echo "🚀 Starting frontend deployment..."
-            
-            # Create deployment directory
-            DEPLOY_DIR="/home/u278943707/domains/amroozcollection.com/public_html"
-            mkdir -p $DEPLOY_DIR
-            cd $DEPLOY_DIR
-            
-            # Backup current deployment
-            if [ -d ".next" ]; then
-              echo "📦 Backing up current deployment..."
-              tar -czf backup-$(date +%Y%m%d-%H%M%S).tar.gz .next public || true
-              # Keep only last 3 backups
-              ls -t backup-*.tar.gz | tail -n +4 | xargs rm -f 2>/dev/null || true
-            fi
-            
-            echo "✅ Ready for file transfer"
-
-      - name: Transfer build files
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ env.DEPLOY_SSH_HOST }}
-          username: ${{ env.DEPLOY_SSH_USERNAME }}
-          password: ${{ env.DEPLOY_SSH_PASSWORD }}
-          port: ${{ env.DEPLOY_SSH_PORT }}
-          source: "deployment.tar.gz"
-          target: "/home/u278943707/domains/amroozcollection.com/public_html/"
-
-      - name: Extract and restart application
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ env.DEPLOY_SSH_HOST }}
-          username: ${{ env.DEPLOY_SSH_USERNAME }}
-          password: ${{ env.DEPLOY_SSH_PASSWORD }}
-          port: ${{ env.DEPLOY_SSH_PORT }}
-          script: |
-            cd /home/u278943707/domains/amroozcollection.com/public_html
-            
-            echo "📂 Extracting build files..."
-            tar -xzf deployment.tar.gz
-            rm deployment.tar.gz
-            
-            echo "🔧 Setting permissions..."
-            chmod -R 755 .next
-            chmod -R 755 public
-            
-            echo "🔄 Restarting application..."
-            # If using PM2
-            if command -v pm2 &> /dev/null; then
-              pm2 restart amrooz-frontend || pm2 start npm --name "amrooz-frontend" -- start
-            else
-              echo "⚠️  PM2 not found, manual restart may be needed"
-            fi
-            
-            echo "✅ Frontend deployment completed successfully!"
-
-      - name: Verify deployment
-        run: |
-          echo "⏳ Waiting for server to restart..."
-          sleep 10
-          
-          echo "🔍 Checking if site is responding..."
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://amroozcollection.com)
-          
-          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
-            echo "✅ Frontend is responding! (HTTP $HTTP_CODE)"
+          set -e
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          if [ -n "$SSH_PRIVATE_KEY" ]; then
+            printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
           else
-            echo "⚠️  Warning: Site returned HTTP $HTTP_CODE"
-            exit 1
+            sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
           fi
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$SSH_PORT" -t ed25519 "$SSH_HOST" > ~/.ssh/known_hosts
+          fi
+          {
+            echo '#!/usr/bin/env bash'
+            echo 'OPTS="-p $SSH_PORT -o StrictHostKeyChecking=yes -o ConnectTimeout=30"'
+            if [ -n "$SSH_PRIVATE_KEY" ]; then
+              echo 'exec ssh $OPTS -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes "$@"'
+            else
+              echo 'exec sshpass -e ssh $OPTS "$@"'
+            fi
+          } > ~/.ssh/run_ssh.sh
+          {
+            echo '#!/usr/bin/env bash'
+            echo 'OPTS="-P $SSH_PORT -o StrictHostKeyChecking=yes -o ConnectTimeout=30"'
+            if [ -n "$SSH_PRIVATE_KEY" ]; then
+              echo 'exec scp $OPTS -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes "$@"'
+            else
+              echo 'exec sshpass -e scp $OPTS "$@"'
+            fi
+          } > ~/.ssh/run_scp.sh
+          chmod 700 ~/.ssh/run_ssh.sh ~/.ssh/run_scp.sh
+
+      - name: Upload release
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+        run: ~/.ssh/run_scp.sh release.tar.gz "$SSH_USERNAME@$SSH_HOST:deploy-frontend.tar.gz"
+
+      - name: Install release and restart
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          ~/.ssh/run_ssh.sh "$SSH_USERNAME@$SSH_HOST" "APP_DIR='$APP_DIR' bash -s" <<'REMOTE'
+          set -euo pipefail
+          BK="$HOME/deploy-backups/frontend"; mkdir -p "$BK"
+          STAGE="$(mktemp -d "$HOME/stage-frontend.XXXXXX")"
+          tar -xzf "$HOME/deploy-frontend.tar.gz" -C "$STAGE"
+          test -f "$STAGE/server.js" && test -d "$STAGE/.next"
+
+          echo "Backing up current release..."
+          tar -czf "$BK/$(date +%Y%m%d-%H%M%S).tar.gz" -C "$APP_DIR" .next node_modules public server.js package.json 2>/dev/null || true
+          ls -t "$BK"/*.tar.gz 2>/dev/null | tail -n +4 | xargs -r rm -f
+
+          echo "Installing new release (keeping .env.production, logs and tmp)..."
+          cd "$APP_DIR"
+          rm -rf .next node_modules public server.js package.json
+          mv "$STAGE/.next" "$STAGE/node_modules" "$STAGE/public" "$STAGE/server.js" "$STAGE/package.json" "$APP_DIR/"
+          rm -rf "$STAGE" "$HOME/deploy-frontend.tar.gz"
+
+          mkdir -p tmp && touch tmp/restart.txt
+          echo "Release installed, restart requested."
+          REMOTE
+
+      - name: Verify site is up
+        run: |
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://amroozcollection.com/ || true)
+            echo "attempt $i: HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 15
+          done
+          echo "::error::Site did not return 200 after deploy. Previous release is in ~/deploy-backups/frontend on the server."
+          exit 1

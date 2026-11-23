@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Self-contained server bundle (.next/standalone) — this is what the
+  // GitHub Actions deploy uploads to Hostinger.
+  output: 'standalone',
   images: {
     remotePatterns: [
       { protocol: 'http', hostname: 'localhost' },
